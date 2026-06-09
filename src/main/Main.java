@@ -1,6 +1,9 @@
 package main;
 
-import java.time.Clock;
+import main.threads.Assistant;
+import main.threads.Professor;
+import main.threads.Student;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -9,47 +12,50 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class Main {
-
-    public static AtomicInteger sum = new AtomicInteger(0);
-    public static AtomicInteger numb = new AtomicInteger(0);
-    public static BlockingDeque<Student> queue = new LinkedBlockingDeque<>();
-    public static List<Student> studentsList = new ArrayList<>();
-    public static CyclicBarrier cyclicBarrier = new CyclicBarrier(2);
-    public static long start = 0;
-
     public static void main(String[] args) {
-
-        //init students
-        System.out.println("Uneti broj studenata: ");
         Scanner sc = new Scanner(System.in);
+        System.out.println("Please insert student count: ");
         int n = sc.nextInt();
+        sc.close();
 
-        for(int i = 0; i < n; i++){
-            Student s = new Student(i);
-            studentsList.add(s);
+        BlockingDeque<Student> queue = new LinkedBlockingDeque<>();
+        AtomicInteger totalScore = new AtomicInteger(0);
+        AtomicInteger processedCount = new AtomicInteger(0);
+
+        List<Student> studentsList = new ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            studentsList.add(new Student(i));
         }
 
         Collections.sort(studentsList);
+        queue.addAll(studentsList);
 
-        for (int i = 0; i < n; i++){
-            queue.add(studentsList.get(i));
-        }
-
-        //Threads init
+        long startTime = System.currentTimeMillis();
 
         ExecutorService pool = Executors.newFixedThreadPool(3);
-        start = System.currentTimeMillis();
-        pool.submit(new Profesor(1));
-        pool.submit(new Profesor(2));
-        pool.submit(new Asistent(1));
 
-        try {
-            Thread.sleep(5000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
+        pool.submit(new Professor(1, queue, totalScore, processedCount, startTime, studentsList.size()));
+        pool.submit(new Professor(2, queue, totalScore, processedCount, startTime, studentsList.size()));
+        pool.submit(new Assistant(1, queue, totalScore, processedCount, startTime));
+
+        while (processedCount.get() < studentsList.size()) {
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
         }
-        pool.shutdownNow();
-        System.out.println(sum.get() * 1.0 / numb.get());
 
+        // Properly shut down the pool
+        pool.shutdownNow();
+
+        int totalProcessed = processedCount.get();
+        if (totalProcessed > 0) {
+            double average = (double) totalScore.get() / totalProcessed;
+            System.out.printf("%nAverage grade: %.2f (defense count: %d)%n", average, totalProcessed);
+        } else {
+            System.out.println("\nNo student managed to defend.");
+        }
     }
 }
